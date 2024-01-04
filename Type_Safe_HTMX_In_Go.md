@@ -4,7 +4,7 @@ Over the past few months, I've been porting my [T3](https://create.t3.gg/) apps 
 
 I want developing my websites to be simple again. I'm tired of all the new frameworks, new paradigms, and seemingly pointless changes in the JS ecosystem.
 
-Obviously, this article is about Go and HTMX. I'll save all the reasons for that combination for another article discussing the entire rewriting process of my 60,000 line React code base, but today I want to focus on the primary pain point of HTMX: remembering all the routes and their parameters in a complicated app. Did I call that route `/user/{id}`, or `/users/{id}`, or `/user/{userId}`, or `/users/{userID}`?
+Obviously, this article is about Go and HTMX. I'll save all the reasons for that combination for another article discussing the rewriting process of my 60,000 line React code base, but today I want to focus on the primary pain point of HTMX: remembering all the routes and their parameters in a complicated app. Did I call that route `/user/{id}`, or `/users/{id}`, or `/user/{userId}`, or `/users/{userID}`?
 
 To those that say, "Git gud, loser. Use better naming conventions and simplify your api," I say, "Sure. But also, build something more complicated than a todo app." I'm certain better rules would help me, but complicated applications end up with hundreds of endpoints for different interactions on pages and it's really hard to keep them all straight no matter how many rules I have in place. This is exactly the problem tRPC solves and it's the main reason people love it. You don't need to remember all these endpoints anymore. Your LSP recognizes them and you just need to select the correct suggestion.
 
