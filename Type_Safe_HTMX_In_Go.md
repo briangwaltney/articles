@@ -1,40 +1,42 @@
 # Type-Safe HTMX Routes in Go
 
-Over the past few months, I've been porting my [T3](https://create.t3.gg/) apps to Golang and HTMX. If you aren't familiar, T3 is a app template that incorporates Typescript, [tRPC](https://trpc.io/), React, and some other tools that make building React apps much better. It works great and I'd still recommend it if you're forced to use React, but it's time for me to move on. 
+Over the past few months, I've been porting my [T3](https://create.t3.gg/) apps to Golang and HTMX. If you aren't familiar, T3 is a app template that incorporates Typescript, [tRPC](https://trpc.io/), React, and some other tools that make building React apps much better. It works great and I'd still recommend it if you're forced to use React, but it's time for me to move on.
 
-I want developing my websites to be simple again. I'm tired of all the new frameworks, new paradigms, and seemingly pointless changes the JS ecosystem requires these days.
-
-_If only there were a language and framework for caveman that just want to build interesting and interactive websites that have a native-app-like user experience and are genuinely type-safe but are too dumb to understand barrow checkers and server vs client components..._
+I want developing my websites to be simple again. I'm tired of all the new frameworks, new paradigms, and seemingly pointless changes in the JS ecosystem.
 
 Obviously, this article is about Go and HTMX. I'll save all the reasons for that combination for another article discussing the entire rewriting process of my 60,000 line React code base, but today I want to focus on the primary pain point of HTMX: remembering all the routes and their parameters in a complicated app. Did I call that route `/user/{id}`, or `/users/{id}`, or `/user/{userId}`, or `/users/{userID}`?
 
-To those that say this is a skill issue and you should use better naming conventions and simplify your api, I say, "Sure. But also build something more complicated than a todo app." I'm certain better rules would help this issue, with a complicated application like I'm building, I'll end up with hundreds of end points for different interactions on the pages and it's really hard to keep them all straight. This is exactly the problem tRPC solves and it's the main reason people love it. You don't need to remember all these endpoints anymore. Your LSP knows them for you and you just need to select the correct auto-complete.
+To those that say, "Git gud, loser. Use better naming conventions and simplify your api," I say, "Sure. But also, build something more complicated than a todo app." I'm certain better rules would help me, but complicated applications end up with hundreds of endpoints for different interactions on pages and it's really hard to keep them all straight no matter how many rules I have in place. This is exactly the problem tRPC solves and it's the main reason people love it. You don't need to remember all these endpoints anymore. Your LSP recognizes them and you just need to select the correct suggestion.
 
-Wouldn't be nice to have something like this: `<div ... hx-get={users.url(userId)}/>`? You'd never have to remember or type the full path again and you would know exactly which parameters you need and what they are named.
+Wouldn't it be nice to have something like this: `<div ... hx-get={users.url(userId)}/>` in your go application? Well you can't! This is Go. Not some [mocha choca bullshit](https://youtu.be/B9IYeVJiWLQ?si=xEmHu-xZ43h3XlSu&t=118) language. Well, you can. But we need to build it ourselves.
 
-The above isn't valid Go code, so we need to choose our tooling smartly. My preferred HTML generation solution is Gomponents. It's nothing more than a set of functions that generate byte slices that get sent to the client as HTML. It looks like this:
+To accomplish this in Go, we need to choose our tooling smartly. [Gomponents](https://www.gomponents.com/) is the easiest answer here. It's nothing more than a set of functions that generate byte slices that get sent to the client as HTML. It looks like this:
 
 ```go
 func MyComponent (userId string) g.Node {
     return Div(
-        HX.Get("/users/"+userId), // this turns into hx-get="/users/user123"
+        HX.Get("/users/"+userId),
         H1(
-            g.Text("This is a heading text within the h1 tag.")
+            g.Text("Heading Text")
         ),
     )
 }
+// This results in
+// <div hx-get="/users/user123">
+//   <h1>Heading Text</h1>
+// </div>
 ```
 
-Ignore the specific types and `g.` stuff for now. The point is Gomponents is JSX with function syntax instead of HTML syntax and all of it executes on the backend. It has all the same utilities of HTML and while the syntax does take a minute to get used to reading, it has all the same information and enables all the same functionality.
+Gomponents is like JSX with function syntax instead of HTML syntax and all of it executes on the backend and doesn't require any pre-processing. It has all the same utilities of HTML and while the syntax does take a minute to get used to reading, it has all the same information and enables all the same functionality.
 
-It also provides with a huge advantage when dealing with our type-safe route problem. We can use all of our Go functionality when creating our components because they are nothing more than Go functions already. We don't have to worry about pre-processing or any of the other challenges that come with some other templating solutions. My type-safe route solution can still be used with those other tools, but the routes will need to be sent to the template as a property instead of inlined like we're going to do with Gomponents.
+It also provides with a huge advantage when dealing with our type-safe route problem. The entire component is just a collection of Go functions, so we can use valid Go code within it and everything will work fine.
 
-So now that we have an easy way to create HTML using Go that will make our solution easier to create. This is what we want to end up with:
+Our components can look like this and will just work^TM^:
 
 ```go
 func (api *Api) MyComponent (userId string) g.Node {
     return Div(
-        HX.Get(api.Routes.User.Url(userId)), // again, this turns into hx-get="/users/user123"
+        HX.Get(api.Routes.User.Url(userId)),
         H1(
             g.Text("This is a heading text within the h1 tag.")
         ),
@@ -42,9 +44,9 @@ func (api *Api) MyComponent (userId string) g.Node {
 }
 ```
 
-If we could do this, we would never need to remember a route again. Like tRPC, we can just let our auto-complete create the routes for us and we would always know what parameters we need and how they are named.
+Everything we're going to build can be used in template engines like Templ as well, but you'll need to pass in the resulting URL as a parameter rather than inlining like I'm doing with Gomponents.
 
-This is our target. Let's build it.
+Now that we have our target. Let's build it.
 
 ```go
 // routeBuilder.go
@@ -77,9 +79,9 @@ func (pb *pathBuilder) newQueryParams(keys ...string) {
 }
 ```
 
-We'll start with defining our basic route `struct` and then create a couple helper functions that just make it easier to create the routes. You could certainly get by without these, but I find them helpful.
+We'll start with defining our basic route `struct` and then create a couple helper functions that just make it easier to create the parameters. You could certainly get by without these, but I find them helpful. This will be the template for all our paths.
 
-Now we'll create a function that generates our route:
+Now we'll create a function that generates our `user` route:
 
 ```go
 // usersApi.go
@@ -94,7 +96,7 @@ func createUser() *User {
 }
 ```
 
-One cool thing we are doing here is defining the `User struct` as a `pathBuilder`. This gives us all the properties of the `pathBuilder` with a different name so we can generate specific properties for `User` without messing with the underlying `struct`. This is what lets us do `routes.User.url()`. It's dangerously close to inheritance, but this is as close as we'll ever get to that sun, so don't worry too much.
+One cool thing we are doing here is defining the `User struct` as a `pathBuilder`. This gives us all the properties of the `pathBuilder` with a different name so we can generate specific properties for `User` without messing with the underlying `struct`. This is what will let us do `Routes.User.Url()` shortly. It's dangerously close to inheritance, but this is as close as we'll ever get to that sun, so don't worry too much.
 
 We generated this route as a function rather than directly because we need an easy way to add it to our Api type like so:
 
@@ -110,31 +112,26 @@ func CreateRoutes() Routes {
 		User:  createUser(),
     }
 }
-```
-
-And then when we build our Api we'll add the routes to it using the `CreateRoutes` function:
-
-```go
 
 type Api struct {
-    //...
+    // db or other stuff
 	Routes Routes
 }
 
 func CreateApi() Api {
-    // add your database connection and whatever else you need here
+    // create your db connection
 	return Api{
-        //...
+        // db or other stuff
 		Routes: CreateRoutes(),
 	}
 }
 ```
 
-This is where we start to see the verbosity of Go come out. Again, Copilot makes this easy, but it's still not as terse as I would like. That said, we won't have to install any packages, rely on and dependencies, and we'll fully understand everything that's going on. Can you _akshuallee_ say that about tRPC?
+Yes, we'll need to create `struct`, `createFunction`, and add them both to the `Routes struct` and the `CreateRoutes` function for every route. It's a pain, but that's the price of type-safety in Go and it's still easier to understand than `getServerSideProps`. I split the `Routes struct` and the `CreateRoutes` function into a separate file because I think it's cleaner as the app grows, but do what you think is best.
 
-Yes, we'll need to create `struct`, `createFunction`, and add them both to the `Routes struct` for every route. It's a pain, less than ideal, but that's the price of type-safety in Go.
+The Verbosity of Go is really starting to come out now. That said, we won't have to install any packages, rely on and dependencies, and we fully understand everything that's going on. Can you _akshuallee_ say that about tRPC?
 
-With everything above, we can do this: `api.Routes.User` in our components for every route we add. Now we need to add some methods to generate the url with the proper parameters applied.
+With everything above, we can do this: `api.Routes.User` in our components, but we need to add a method to generate the URL with the proper parameters applied.
 
 One more helper function for all of our paths:
 
@@ -161,7 +158,7 @@ func (pb *pathBuilder) genBuilder(params, queryParams param) string {
 }
 ```
 
-This simply cycles through the parameters we pass in and adds them to the template so we end up with the proper output in our HTMX url.
+This simply loops through the parameters we pass in and adds them to the template so we end up with the proper output URL. Again, you can get by without this if you want to generate the string yourself. This just makes life a little easier.
 
 Then we create a `User` specific `Url` function that will tell us to pass the `userId` and nothing else:
 
@@ -183,37 +180,43 @@ func (p *User) Url(userId string) string {
 }
 ```
 
-I repeated initial definitions so you can see everything in one place to properly assess if this pattern is getting out of control yet.
+I repeated initial definitions so you can see everything in one place to properly assess if this is getting out of control yet.
 
-With this function in place, we achieved our goal! In our component, we can now use `api.routes.User.Url("user123")` and it will produce the correct url and add the parameters in the correct place for us.
+With this function in place, we achieved our goal!
 
-This pattern has saved me seconds of going back and forth to my router to verify every route. It's so much nicer to just hit tab on the next auto-complete and continuing on than it is to hit escape to get back to normal mode, space 1 to harpoon back to my router, type /user to search for the path I'm looking for, verify the spelling and then space 2 to harpoon back to the original file and another i keystroke to get back to insert mode. If you don't see the beauty in writing 14 lines of code to save 10 keystrokes, we can't be friends.
+In our component, we can now use `api.Routes.User.Url("user123")` and it will produce the correct URL and add the parameter in the correct place for us. We also have all the tools in place for more complicated routes. You can add more arguments to the Url function to accept more parameters or query parameters or even accept a custom `struct` if you have an especially ugly path that has some optional query parameters. The `genBuilder` function is going to ignore all the `""` values for you and leave you with the clean URL.
+
+This pattern has saved me **seconds** of going back and forth to my router definitions to verify paths. It's so much nicer to accept the next auto-complete and continuing on than it is to hit `<ESC>` to get back to normal mode, `<leader>1` to harpoon back to my router, `/` `user` to search for the path I'm looking for, verify the spelling and then `<leader>2` to harpoon back to the original file and another `i` keystroke to get back to insert mode. If you don't see the beauty in writing 14 lines of code to save 12 keystrokes, we can't be friends.
 
 Here is one more extension on this pattern that makes it even better.
 
 ```go
 func (p *User) Handler(a *Api) (string, http.HandlerFunc) {
-	return p.template, a.Auth(func(w http.ResponseWriter, r *http.Request) {
-        // Handle it.
+	return p.template, a.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+        // backend magic stuff
+        a.MyComponent("user69").Render(w)
 	})
 }
 ```
 
-I add this function right below the `url` function. Writing my handler function in this way gives me an easy way to access the rest of my `Api struct` so I have easy access to my db and other utilities, and the output of this function is the type my router expects so when I need to register this route in my router it looks like this:
+I add this function right below the `Url` function so everything is together and it's easy for me to see the path, parameters, and handler all in one place. One added benefit of having everything colocated like this is that changing the url for something means changing one line of code. All of my links, buttons, and HTMX calls will update automatically. They all reference the same definition.
+
+Writing my handler function in this way also gives me an easy way to access the rest of my `Api struct` so I have easy access to my middleware, db, and anything else I've added for easy access, and the `(string, http.HandlerFunc)` output of this function is the type my router expects so registering my route is as simple as:
 
 ```go
 	a := api.CreateApi()
 	R := chi.NewRouter()
 
 	R.Get(a.Routes.User.Handler(&a))
+    // more routes
 ```
 
 This reduces one more place for me to make a typo and makes it super easy to register new routes.
 
-All in all, ignoring the `pathBuilder` definition and its utility functions, each route does take an extra 15-20 repetitive lines of code, but everything related to that route is in exactly the same place. The path, the handler, and the parameter labels are all in one place and I have full type safety when I'm adding the route to my components. After getting used to the boilerplate, it feels like a really good compromise between Go and HTMX's simplicity and the benefits of tools like tRPC. Copilot makes it super easy to generate new routes and I honestly don't think it takes me any extra time to build my routes using this pattern
+All in all, ignoring the `pathBuilder` definition and its utility functions, each route requires an extra 15-20 repetitive lines of code, but the type-safety has been worth it to me. It feels like a good compromise between Go and HTMX's simplicity and the benefits of tools like tRPC. Most of the extra typing is the type of boilerplate Copilot is perfect for. After creating my first route, Copilot generates the rest for me nearly automatically and it takes almost no extra time to write new paths.
 
-Is this pattern overkill for the one route we build above? Yes, 100%. If you only have 5 routes, there is no need to use this pattern. The second time a button doesn't work because you missed typed the path when you were writing the HTMX is when you should start thinking about this pattern.
+For small applications, this is overkill and you should only do it if using your LSP to its fullest gets you to half mast like it does me. Let's be honest, T3 is overkill for many small applications as well. This pattern really starts to shine when your routes get more complicated and you're using them in multiple places. My rule is wait until I've created 2 HTMX calls that didn't work because I had a typo in the path and then go back and adding this to my application. One nice feature of this pattern is you can add it incrementally. We're just dealing with strings so all your old ones will still work.
 
-It also becomes more attractive when your marketing guy tells you the payment page url should be `/sign-up` instead of `/payment` and you have to find and replace every instance in your code base and risk missing one instead of changing it in one place. I promise I've never had a marketing guy ask me to do that.
+If you try this pattern, let me know what you think of it or if you find a way to make it more terse. I would love to see your solutions to this problem.
 
-I'm still relatively new at Go, so this is unlikely to be the best implementation of this. If you have ideas on how to improve, please let me know.
+Don't forget to subscribe to the channel. The name is the Type-Safe HTMXagen.
