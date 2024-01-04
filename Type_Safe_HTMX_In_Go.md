@@ -225,4 +225,6 @@ For small applications, this is overkill and you should only do it if using your
 
 If you try this pattern, let me know what you think of it or if you find a way to make it more terse. I would love to see your solutions to this problem.
 
+Don't forget to throw a few bucks to your favorite open source developers. If you can afford $20/month for Copilot you can afford $20/month distributed to your favorite developers that give you a reason to use Copilot.
+
 Don't forget to subscribe to the channel. The name is the Type-Safe HTMXagen.
